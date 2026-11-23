@@ -46,7 +46,8 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         // versionCode = 主版本 × 10000 + 次版本 × 100 + 补丁号。
         versionCode = 205
-        versionName = "0.2.5"
+        // 先锋 819B（安卓 7.1）适配版：0.2.5 + 下面 CHANGELOG 里的改动。
+        versionName = "0.2.5-pioneer1"
     }
 
     sourceSets {

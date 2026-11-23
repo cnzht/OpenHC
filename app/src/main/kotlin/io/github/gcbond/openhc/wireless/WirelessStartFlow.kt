@@ -11,6 +11,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import io.github.gcbond.openhc.platform.bluetooth.BluetoothStatus
 import io.github.gcbond.openhc.platform.log.Log
 import io.github.gcbond.openhc.settings.AppSettings
 import io.github.gcbond.openhc.settings.WirelessPreferences
@@ -36,8 +37,11 @@ internal class WirelessStartFlow(
     /** 「开始无线连接」。 */
     fun start() {
         val sdk = Build.VERSION.SDK_INT
-        // 只用数据线连接开着、或系统太老开不了本地热点：不用申请任何权限，交给调度直接说明原因。
-        if (wirelessPrefs.wiredOnly || !WirelessNetworkPlan.hotspotSupported(sdk)) {
+        // 只用数据线连接开着、或系统太老开不了本地热点（且没选「车机自带热点」「WiFi 直连」）：
+        // 不用申请任何权限，交给调度直接说明原因。
+        val wirelessAvailable = WirelessNetworkPlan.hotspotSupported(sdk) ||
+            wirelessPrefs.carHotspot || wirelessPrefs.usesWifiDirect
+        if (wirelessPrefs.wiredOnly || !wirelessAvailable) {
             controller().start()
             return
         }
@@ -85,8 +89,9 @@ internal class WirelessStartFlow(
     }
 
     /**
-     * 请系统打开蓝牙（系统弹框）。安卓 12 起要先有「附近的设备」权限：没有就先走 [start] 申请。
-     * 车机系统没有这个页面时只记日志，界面上的提示仍然让用户自己去打开。
+     * 请系统打开蓝牙。先直接调 [BluetoothAdapter.enable]（安卓 12 以下 BLUETOOTH_ADMIN 是安装时权限，不用等用户点框；
+     * 先锋这类车机的系统弹框经常没反应）。直接开没成功再弹系统框；车机系统没有这个页面时只记日志，
+     * 界面上的提示仍然让用户自己去打开。安卓 12 起要先有「附近的设备」权限：没有就先走 [start] 申请。
      */
     // 上面先判断了权限，lint 认不出这种写法。
     @SuppressLint("MissingPermission")
@@ -94,6 +99,21 @@ internal class WirelessStartFlow(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !granted(WirelessPermissions.BLUETOOTH_CONNECT)) {
             start()
             return
+        }
+        val adapter = BluetoothStatus.adapter(activity)
+        if (adapter != null && !adapter.isEnabled) {
+            val started = try {
+                adapter.enable()
+            } catch (e: SecurityException) {
+                Log.w(TAG, "直接开蓝牙被拒：${e.message}")
+                false
+            } catch (e: RuntimeException) {
+                false
+            }
+            if (started) {
+                Log.i(TAG, "已直接请求打开蓝牙，等系统状态变化")
+                return
+            }
         }
         launchQuietly(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), "打开蓝牙的系统框")
     }

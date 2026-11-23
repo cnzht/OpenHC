@@ -423,8 +423,11 @@ class WirelessController(
         userStopped = false
         if (wirelessPrefs.wiredOnly) return blocked(kind, WirelessNotice.WiredOnly, AutoHold.WIRED_ONLY)
         if (wiredActive()) return blocked(kind, WirelessNotice.WiredActive, AutoHold.WIRED_ACTIVE)
-        // 本地热点安卓 8.0 起才有，更早的车机用不了无线。不要求车机 WiFi 开着：开热点时单射频车机自己的 WiFi 本来就会断。
-        if (!WirelessNetworkPlan.hotspotSupported(Build.VERSION.SDK_INT)) {
+        // 本地热点安卓 8.0 起才有；更早的车机只有选了「车机自带热点」或「WiFi 直连」时才能无线（这两种都不开本地热点）。
+        // 先锋 819B（安卓 7.1）就是这种情况：本地热点和有线 VPN 都没有，只能走这两条路。
+        if (!WirelessNetworkPlan.hotspotSupported(Build.VERSION.SDK_INT) &&
+            !wirelessPrefs.carHotspot && !wirelessPrefs.usesWifiDirect
+        ) {
             return blocked(kind, WirelessNotice.HotspotUnsupported, AutoHold.HOTSPOT_UNSUPPORTED)
         }
         val identity = when (val loaded = IdentityLoader.load(app)) {
