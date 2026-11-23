@@ -1,0 +1,50 @@
+# 先锋 819B 适配版（0.2.5-pioneer1）构建：手动触发，在 GitHub 的机器上编出调试 APK。
+#
+# 用之前先做两件事（都是一次性）：
+#   1. 把本仓库推到你自己的 fork（或这个分支），并把这个文件一起推上去。
+#   2. 加一个 Actions Secret，名字 OPENHC_IDENTITY_JSON，值是 openhc-identity.json 的
+#      base64（不要直接贴原文）：base64 -w0 openhc-identity.json | gh secret set OPENHC_IDENTITY_JSON
+#      ——这个文件不进仓库，构建时才从 Secret 还原进安装包。
+# 触发：仓库 Actions 页 → Build Pioneer APK → Run workflow。编好后在 Artifacts 里下载。
+
+name: Build Pioneer APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK 36
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Restore identity file from secret
+        run: |
+          mkdir -p "$HOME/openhc-identity"
+          printf '%s' "${{ secrets.OPENHC_IDENTITY_JSON }}" | base64 -d > "$HOME/openhc-identity/openhc-identity.json"
+          test -s "$HOME/openhc-identity/openhc-identity.json"
+
+      - name: Write local.properties
+        run: |
+          printf 'sdk.dir=%s\nopenhc.identity.dir=%s/openhc-identity\n' "$ANDROID_HOME" "$HOME" > local.properties
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenHC-0.2.5-pioneer1-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
